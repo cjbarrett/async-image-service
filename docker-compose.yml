@@ -11,3 +11,8 @@ services:
       - "8000:8000"
     depends_on:
       - rabbitmq
+
+  worker:
+    build: ./worker
+    depends_on:
+      - rabbitmq
