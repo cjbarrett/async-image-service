@@ -4,15 +4,26 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   api:
     build: ./api
     ports:
       - "8000:8000"
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
 
   worker:
     build: ./worker
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy  
+    environment:
+      PYTHONUNBUFFERED: "1"

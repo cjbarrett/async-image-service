@@ -3,25 +3,32 @@ import uuid
 import json
 import pika
 
-from models.task import Task
+from models.job import TaskCreate
+from services.job_store import create_job
+from models.job_status import JobStatus
 
 router = APIRouter()
 
+
+def get_channel():
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters("rabbitmq")
+    )
+    return connection.channel()
+
+
 @router.post("/tasks")
-def create_task(task: Task):
+def create_task(task: TaskCreate):
     job_id = str(uuid.uuid4())
+
+    create_job(job_id)
+
+    channel = get_channel()
 
     message = {
         "job_id": job_id,
         "task": task.task
     }
-
-    connection = pika.BlockingConnection(
-    pika.ConnectionParameters("rabbitmq")
-)
-
-    channel = connection.channel()
-    channel.queue_declare(queue="task_queue")
 
     channel.basic_publish(
         exchange="",
@@ -30,6 +37,6 @@ def create_task(task: Task):
     )
 
     return {
-        "message": "Task submitted",
-        "job_id": job_id
+        "job_id": job_id,
+        "status": JobStatus.QUEUED
     }

@@ -1,62 +1,60 @@
+import time
 import pika
 import json
-import time
-
-QUEUE_NAME = "task_queue"
-
-
-def connect_with_retry():
-    print("[WORKER] Starting connection to RabbitMQ...", flush=True)
-
-    for attempt in range(10):
-        try:
-            connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host="rabbitmq")
-            )
-            print("[WORKER] Connected to RabbitMQ", flush=True)
-            return connection
-        except Exception as e:
-            print(
-                f"[WORKER] RabbitMQ not ready (attempt {attempt + 1}/10): {e}",
-                flush=True,
-            )
-            time.sleep(2)
-
-    raise Exception("Could not connect to RabbitMQ after retries")
 
 
 def callback(ch, method, properties, body):
-    try:
-        task = json.loads(body)
-        print(f"[WORKER] Received task: {task}", flush=True)
+    print(f"[WORKER] Received: {body.decode()}")
 
-        # simulate work
-        time.sleep(2)
 
-        print(f"[WORKER] Finished task: {task}", flush=True)
+def connect_rabbitmq():
+    for i in range(20):
+        try:
+            print(f"[WORKER] connecting attempt {i+1}", flush=True)
 
-    except Exception as e:
-        print(f"[WORKER] Error processing message: {e}", flush=True)
+            return pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host="rabbitmq",
+                    port=5672,
+                    heartbeat=600,
+                    blocked_connection_timeout=300,
+                    connection_attempts=10,
+                    retry_delay=2,
+                )
+            )
+        except Exception as e:
+            print(f"[WORKER] retrying: {e}")
+            time.sleep(2)
+
+    raise Exception("RabbitMQ never became available")
 
 
 def main():
-    print("[WORKER] Booting worker...", flush=True)
-
-    connection = connect_with_retry()
+    connection = connect_rabbitmq()
     channel = connection.channel()
 
-    channel.queue_declare(queue=QUEUE_NAME)
+    channel.queue_declare(queue="task_queue", durable=True)
+
+    channel.basic_qos(prefetch_count=1)
 
     channel.basic_consume(
-        queue=QUEUE_NAME,
+        queue="task_queue",
         on_message_callback=callback,
-        auto_ack=True,
+        auto_ack=True
     )
 
     print("[WORKER] Waiting for messages...", flush=True)
 
-    channel.start_consuming()
-
+    try:
+        channel.start_consuming()
+    except KeyboardInterrupt:
+        print("[WORKER] shutting down...")
+        channel.stop_consuming()
+    finally:
+        connection.close()
 
 if __name__ == "__main__":
     main()
+
+
+
