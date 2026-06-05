@@ -19,11 +19,25 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-
+      redis:
+        condition: service_healthy
   worker:
     build: ./worker
     depends_on:
       rabbitmq:
-        condition: service_healthy  
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       PYTHONUNBUFFERED: "1"
+  
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
