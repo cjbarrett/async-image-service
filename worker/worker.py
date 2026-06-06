@@ -4,6 +4,8 @@ import json
 import redis
 from datetime import datetime
 
+STREAM_KEY = "job_events_stream"
+
 redis_client = redis.Redis(
     host="redis",
     port=6379,
@@ -19,9 +21,18 @@ def update_job(job_id: str, **updates):
     job = json.loads(data)
 
     job.update(updates)
-    job["updated_at"] = datetime.utcnow().isoformat()
+    job["updated_at"] = datetime.now().isoformat()
 
     redis_client.set(job_id, json.dumps(job))
+
+
+def publish_event(job_id: str, status: str):
+    event = {
+        "job_id": str(job_id),
+        "status": str(status)
+    }
+
+    redis_client.xadd(STREAM_KEY, event)
 
 
 def callback(ch, method, properties, body):
@@ -33,11 +44,13 @@ def callback(ch, method, properties, body):
     print(f"[WORKER] Received job_id={job_id}, task={task}")
 
     update_job(job_id, status="processing")
+    publish_event(job_id, "processing")
 
     try:
         time.sleep(5)
 
         update_job(job_id, status="completed")
+        publish_event(job_id, "completed")
 
         print(f"[WORKER] Completed job_id={job_id}")
 
@@ -45,6 +58,7 @@ def callback(ch, method, properties, body):
 
     except Exception as e:
         update_job(job_id, status="failed")
+        publish_event(job_id, "failed")
 
         print(f"[WORKER] Failed job_id={job_id}: {e}")
 
