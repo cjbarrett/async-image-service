@@ -1,10 +1,54 @@
 import time
 import pika
 import json
+import redis
+from datetime import datetime
+
+redis_client = redis.Redis(
+    host="redis",
+    port=6379,
+    decode_responses=True
+)
+
+
+def update_job(job_id: str, **updates):
+    data = redis_client.get(job_id)
+    if not data:
+        return
+
+    job = json.loads(data)
+
+    job.update(updates)
+    job["updated_at"] = datetime.utcnow().isoformat()
+
+    redis_client.set(job_id, json.dumps(job))
 
 
 def callback(ch, method, properties, body):
-    print(f"[WORKER] Received: {body.decode()}")
+    message = json.loads(body)
+
+    job_id = message["job_id"]
+    task = message.get("task")
+
+    print(f"[WORKER] Received job_id={job_id}, task={task}")
+
+    update_job(job_id, status="processing")
+
+    try:
+        time.sleep(5)
+
+        update_job(job_id, status="completed")
+
+        print(f"[WORKER] Completed job_id={job_id}")
+
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+
+    except Exception as e:
+        update_job(job_id, status="failed")
+
+        print(f"[WORKER] Failed job_id={job_id}: {e}")
+
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
 def connect_rabbitmq():
@@ -40,21 +84,13 @@ def main():
     channel.basic_consume(
         queue="task_queue",
         on_message_callback=callback,
-        auto_ack=True
+        auto_ack=False
     )
 
     print("[WORKER] Waiting for messages...", flush=True)
 
-    try:
-        channel.start_consuming()
-    except KeyboardInterrupt:
-        print("[WORKER] shutting down...")
-        channel.stop_consuming()
-    finally:
-        connection.close()
+    channel.start_consuming()
+
 
 if __name__ == "__main__":
     main()
-
-
-
