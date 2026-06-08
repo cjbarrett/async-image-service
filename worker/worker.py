@@ -4,15 +4,10 @@ import json
 import redis
 from datetime import datetime
 
-STREAM_KEY = "job_events_stream"
-
-redis_client = redis.Redis(
-    host="redis",
-    port=6379,
-    decode_responses=True
-)
-
-
+from deps import redis_client
+from models.job_status import JobStatus
+from config import REDIS_HOST, REDIS_PORT, RABBITMQ_HOST, RABBITMQ_PORT, STREAM_KEY
+ 
 def update_job(job_id: str, **updates):
     data = redis_client.get(job_id)
     if not data:
@@ -43,14 +38,14 @@ def callback(ch, method, properties, body):
 
     print(f"[WORKER] Received job_id={job_id}, task={task}")
 
-    update_job(job_id, status="processing")
-    publish_event(job_id, "processing")
+    update_job(job_id, status=JobStatus.PROCESSING)
+    publish_event(job_id, JobStatus.PROCESSING)
 
     try:
         time.sleep(5)
 
-        update_job(job_id, status="completed")
-        publish_event(job_id, "completed")
+        update_job(job_id, status=JobStatus.COMPLETED)
+        publish_event(job_id, JobStatus.COMPLETED)
 
         print(f"[WORKER] Completed job_id={job_id}")
 
@@ -72,8 +67,8 @@ def connect_rabbitmq():
 
             return pika.BlockingConnection(
                 pika.ConnectionParameters(
-                    host="rabbitmq",
-                    port=5672,
+                    host=RABBITMQ_HOST,
+                    port=RABBITMQ_PORT,
                     heartbeat=600,
                     blocked_connection_timeout=300,
                     connection_attempts=10,

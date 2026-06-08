@@ -2,18 +2,12 @@ import json
 import asyncio
 import redis
 from fastapi import APIRouter, WebSocket
+from deps import redis_client
+
+from models.protocol import WSMessageType, WSMessageMode
+from config import REDIS_HOST, REDIS_PORT, STREAM_KEY, GROUP, CONSUMER
 
 router = APIRouter()
-
-STREAM_KEY = "job_events_stream"
-GROUP = "ws_group"
-CONSUMER = "ws_1"
-
-redis_client = redis.Redis(
-    host="redis",
-    port=6379,
-    decode_responses=True
-)
 
 # Ensure consumer group exists
 try:
@@ -32,7 +26,7 @@ async def job_updates(websocket: WebSocket):
     await websocket.accept()
 
     await websocket.send_json({
-        "type": "connection",
+        "type": WSMessageType.CONNECTION.value,
         "status": "connected"
     })
 

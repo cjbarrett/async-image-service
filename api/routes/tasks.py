@@ -3,24 +3,19 @@ import uuid
 from datetime import datetime
 
 import pika
-import redis
-from fastapi import APIRouter, HTTPException
 
+from fastapi import APIRouter, HTTPException
 from models.task_request import TaskRequest
 from models.job_status import JobStatus
 
+from deps import redis_client
+from config import REDIS_HOST, REDIS_PORT, RABBITMQ_HOST
+
 router = APIRouter()
-
-redis_client = redis.Redis(
-    host="redis",
-    port=6379,
-    decode_responses=True
-)
-
 
 def get_rabbitmq_connection():
     return pika.BlockingConnection(
-        pika.ConnectionParameters(host="rabbitmq")
+        pika.ConnectionParameters(host=RABBITMQ_HOST)
     )
 
 
@@ -28,7 +23,7 @@ def get_rabbitmq_connection():
 def create_task(request: TaskRequest):
 
     job_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now().isoformat()
 
     job = {
         "job_id": job_id,
